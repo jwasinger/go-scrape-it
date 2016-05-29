@@ -5,16 +5,42 @@ import (
   "io"
   //"io/ioutil"
   "net/http"
+  "net/url"
   "golang.org/x/net/html"
   "sync"
   //"go_scraper/stack"
+  "github.com/andybalholm/cascadia"
 )
 
 type PageData struct {
   url, data string;
 }
 
-func parse_links(body io.Reader, links chan string) (int, int) {
+type ScrapeState struct {
+  
+}
+
+func extract_text(html_root *html.Node) {
+  for {
+    
+  }
+}
+
+func match_all(selector string, html_root *html.Node) []*html.Node {
+  sel, err := Compile(string)
+  if err {
+    panic err
+  }
+
+  match_nodes, err := sel.MatchAll(html_root)
+  if err {
+    panic err
+  }
+
+  return match_nodes
+}
+
+func parse_data(body io.Reader, pages chan string) {
   //output_links := make(
   tokenizer := html.NewTokenizer(body)
   for {
@@ -22,12 +48,12 @@ func parse_links(body io.Reader, links chan string) (int, int) {
 
     switch {
     case token == html.ErrorToken:
-      return 0, 1
+      return
     case token == html.StartTagToken:
       token := tokenizer.Token()
       for _, attr := range token.Attr {
         if attr.Key == "href" {
-          links <- attr.Val
+          pages <- attr.Val
           continue
         }
       }
@@ -35,17 +61,14 @@ func parse_links(body io.Reader, links chan string) (int, int) {
       continue
     }
   }
-
-  return 0, 1
 }
 
-func scrape(url string, c chan string, wg *sync.WaitGroup) {
+func scrape(url string, out_content chan string, wg *sync.WaitGroup) {
   resp, _ := http.Get(url)
 
   defer wg.Done();
   
-  //links, content := parse_links(resp.Body)
-  parse_links(resp.Body, c)
+  parse_data(resp.Body, out_content)
 
   /*
   c <- PageData{
@@ -62,30 +85,33 @@ func main () {
 
   urls := []string{
     "http://reddit.com",
+    "https://huffingtonpost.com",
   }
 
-  data := make(chan string);
+  data := make(chan string)
   var wg sync.WaitGroup
 
   wg.Add(len(urls));
   fmt.Println(len(urls))
 
-  for i := range urls {
-    go scrape(urls[i], data, &wg);
+  for _, url := range urls {
+    url, err := url.Parse(url)
+    if err {
+      panic(err)
+    }
+
+    go scrape(url, data, &wg)
   }
 
   done := false
 
   go func() {
-    for {
-      if done {
-        break
-      }
-
+    for !done {
       link := <-data
       links = append(links, link)
     }
   }()
+
   wg.Wait()
   done = true
 
