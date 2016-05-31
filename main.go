@@ -13,17 +13,8 @@ import (
 )
 
 type PageData struct {
+  links []string
   url, data string;
-}
-
-type ScrapeState struct {
-  
-}
-
-func extract_text(html_root *html.Node) {
-  for {
-    
-  }
 }
 
 func match_all(selector string, html_root *html.Node) []*html.Node {
@@ -40,20 +31,29 @@ func match_all(selector string, html_root *html.Node) []*html.Node {
   return match_nodes
 }
 
-func parse_data(body io.Reader, pages chan string) {
-  //output_links := make(
+func scrape(url string, out_content chan *PageData, wg *sync.WaitGroup) {
+  resp, _ := http.Get(url)
+
+  defer wg.Done();
+  defer resp.Body.Close()
+  
+  var page_data PageData
+
   tokenizer := html.NewTokenizer(body)
   for {
     token := tokenizer.Next()
 
     switch {
     case token == html.ErrorToken:
+      out_data <- &page_data
       return
+    case token == html.TextToken:
+      page_data.url.WriteString(token.Text())
     case token == html.StartTagToken:
       token := tokenizer.Token()
       for _, attr := range token.Attr {
         if attr.Key == "href" {
-          pages <- attr.Val
+          page_data.links = append(page_data.links, attr.Val)
           continue
         }
       }
@@ -61,23 +61,8 @@ func parse_data(body io.Reader, pages chan string) {
       continue
     }
   }
-}
 
-func scrape(url string, out_content chan string, wg *sync.WaitGroup) {
-  resp, _ := http.Get(url)
-
-  defer wg.Done();
-  
-  parse_data(resp.Body, out_content)
-
-  /*
-  c <- PageData{
-    url,
-    string(bytes))
-  }
-  */
-
-  resp.Body.Close()
+  out_content <- &page_data
 }
 
 func main () {
@@ -94,13 +79,22 @@ func main () {
   wg.Add(len(urls));
   fmt.Println(len(urls))
 
+  var delta_time int64
+  var last_time int64
+
   for _, url := range urls {
     url, err := url.Parse(url)
     if err {
       panic(err)
     }
 
+    last_time = time.Time.Now().Unix()
+
     go scrape(url, data, &wg)
+    
+    if time.Time.Now().Unix() - last_time < request_delay {
+
+    }
   }
 
   done := false
@@ -108,7 +102,6 @@ func main () {
   go func() {
     for !done {
       link := <-data
-      links = append(links, link)
     }
   }()
 
