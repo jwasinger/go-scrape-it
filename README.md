@@ -1,5 +1,5 @@
-# Material Dashboard
-  This application is a mockup of an analytics dashboard built to showcase the features of Angular Material and D3.js.
+# Go-scrape-it
+  A recursive, customizable web-scraper written in Golang.
 
 ## Installation 
 
