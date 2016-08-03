@@ -2,113 +2,88 @@ package main
 
 import (
   "fmt"
-  "io"
-  //"io/ioutil"
+  "bytes"
+  "encoding/json"
   "net/http"
-  "net/url"
-  "golang.org/x/net/html"
-  "sync"
-  //"go_scraper/stack"
-  "github.com/andybalholm/cascadia"
+  "os"
+  "go-scraper/scraper"
 )
 
-type PageData struct {
-  links []string
-  url, data string;
-}
+func index_elasticsearch(ch chan scraper.PageData, url string) {
+  client := &http.Client{}
+  buf := new(bytes.Buffer)
 
-func match_all(selector string, html_root *html.Node) []*html.Node {
-  sel, err := Compile(string)
-  if err {
-    panic err
-  }
-
-  match_nodes, err := sel.MatchAll(html_root)
-  if err {
-    panic err
-  }
-
-  return match_nodes
-}
-
-func scrape(url string, out_content chan *PageData, wg *sync.WaitGroup) {
-  resp, _ := http.Get(url)
-
-  defer wg.Done();
-  defer resp.Body.Close()
-  
-  var page_data PageData
-
-  tokenizer := html.NewTokenizer(body)
   for {
-    token := tokenizer.Next()
+    page, more := <-ch
+    if !more {
+      break
+    }
 
-    switch {
-    case token == html.ErrorToken:
-      out_data <- &page_data
+    json.NewEncoder(buf).Encode(page)
+
+    req, err := http.NewRequest("POST", url, buf)
+    if err != nil {
+      fmt.Println(err)
       return
-    case token == html.TextToken:
-      page_data.url.WriteString(token.Text())
-    case token == html.StartTagToken:
-      token := tokenizer.Token()
-      for _, attr := range token.Attr {
-        if attr.Key == "href" {
-          page_data.links = append(page_data.links, attr.Val)
-          continue
-        }
-      }
-    case token == html.EndTagToken:
-      continue
+    }
+
+    req.Header.Set("Content-Type", "json")
+
+    _, err = client.Do(req)
+    if err != nil {
+      fmt.Println(err)
     }
   }
-
-  out_content <- &page_data
 }
 
-func main () {
-  links := []string{}
+const (
+  CRAWL = iota
+  LOAD_FROM_FILE = iota
+)
 
-  urls := []string{
-    "http://reddit.com",
-    "https://huffingtonpost.com",
-  }
+func main() {
+  s := scraper.New()
 
-  data := make(chan string)
-  var wg sync.WaitGroup
+  pages := make(chan scraper.PageData)
 
-  wg.Add(len(urls));
-  fmt.Println(len(urls))
+  //archive_ch := make(chan scraper.PageData)
+  index_ch := make(chan scraper.PageData)
+  root_url := os.Args[1:][0]
 
-  var delta_time int64
-  var last_time int64
+  ops := CRAWL
 
-  for _, url := range urls {
-    url, err := url.Parse(url)
-    if err {
-      panic(err)
+  switch ops {
+  case CRAWL:
+    //scraper.Multiplex(pages, [2]chan scraper.PageData{archive_ch, index_ch,})
+
+    ignored_urls := []string{
+      "http:void(0)",
     }
 
-    last_time = time.Time.Now().Unix()
-
-    go scrape(url, data, &wg)
-    
-    if time.Time.Now().Unix() - last_time < request_delay {
-
+    /*
+    ignore_content_rules := []string {
+      "div;class=well,sidebar-nav",
+      "div;id=navigation",
+      "form;id=commentform",
     }
+    */
+
+    s.IgnoreUrls(root_url, ignored_urls)
+    go s.Crawl(root_url, pages)
+    for {
+      p, more := <- pages
+      if !more {
+        break
+      }
+      fmt.Println(p)
+      _ = "breakpoint"
+    }
+
+    return
+    //go scraper.SaveArchive(archive_ch, "data/archiver.json")
+  case LOAD_FROM_FILE:
+    //go scraper.LoadArchive(index_ch, "data/archiver.json")
   }
 
-  done := false
-
-  go func() {
-    for !done {
-      link := <-data
-    }
-  }()
-
-  wg.Wait()
-  done = true
-
-  for _, link := range links{
-    fmt.Println(link)
-  }
+  go index_elasticsearch(index_ch, "http://localhost:9200/space_name/page")
 }
